@@ -271,7 +271,7 @@ void sendMIDIMessages(bool touched) {
     // Touch
     static bool prevTouched = false; // Whether the knob is being touched
     if (touched != prevTouched) {
-        MIDIAddress addr(MCU::FADER_TOUCH_1, Channel(Idx)); // Send note on/off on correct channel
+        MIDIAddress addr(MCU::FADER_TOUCH_1, Channel(Idx)); // Send note on/off on the corresponding channel
         touched ? midi.sendNoteOn(addr, 127) : midi.sendNoteOff(addr, 127);
         prevTouched = touched;
     }
