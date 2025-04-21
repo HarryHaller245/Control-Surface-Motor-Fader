@@ -111,7 +111,7 @@ struct Config {
     // Allow control for tuning and starting experiments over Serial:
     static constexpr bool serial_control = false;
     // I²C slave address (zero to disable I²C):
-    static constexpr uint8_t i2c_address = 8;
+    static constexpr uint8_t i2c_address = 0;
     // The baud rate to use for the Serial interface (e.g. for MIDI_DEBUG,
     // print_controller_signals, serial_control, etc.)
     static constexpr uint32_t serial_baud_rate = 1000000;
@@ -120,6 +120,9 @@ struct Config {
     // Hairless MIDI uses 115'200 by default.
     // The included python/SerialMIDI.py script uses 1'000'000.
     static constexpr uint32_t midi_baud_rate = serial_baud_rate;
+    // Send back MIDI positions over Serial on Change.
+    // Usefull for testing faders with MIDI feedback.
+    static constexpr bool midi_feedback = false;
 
     // Number of faders, must be between 1 and 4:
     static constexpr size_t num_faders = 2;
@@ -138,7 +141,6 @@ struct Config {
     // Useful if your DAW does not send any feedback when manually moving the
     // fader.
     static constexpr bool touch_to_current_position = false;
-
     // Capacitive touch sensing RC time threshold.
     // Increase this time constant if the capacitive touch sense is too
     // sensitive or decrease it if it's not sensitive enough:
@@ -222,34 +224,34 @@ PID controllers[] {
     // This is an example of a controller with very little overshoot
     {
         4,     // Kp: proportional gain
-        2,     // Ki: integral gain
-        0.03, // Kd: derivative gain
+        11,     // Ki: integral gain
+        0.028, // Kd: derivative gain
         Ts,    // Ts: sampling time
-        30, // fc: cutoff frequency of derivative filter (Hz), zero to disable
+        40, // fc: cutoff frequency of derivative filter (Hz), zero to disable
     },
-    // This one has more overshoot, but less ramp tracking error
+    // This is an example of a controller with very little overshoot
     {
         4,     // Kp: proportional gain
-        11,    // Ki: integral gain
+        11,     // Ki: integral gain
         0.028, // Kd: derivative gain
         Ts,    // Ts: sampling time
         40, // fc: cutoff frequency of derivative filter (Hz), zero to disable
     },
     // This is a very aggressive controller
     {
-        8.55,  // Kp: proportional gain
-        440,   // Ki: integral gain
-        0.043, // Kd: derivative gain
+        4,     // Kp: proportional gain
+        11,     // Ki: integral gain
+        0.028, // Kd: derivative gain
         Ts,    // Ts: sampling time
-        70, // fc: cutoff frequency of derivative filter (Hz), zero to disable
+        40, // fc: cutoff frequency of derivative filter (Hz), zero to disable
     },
-    // Fourth controller
+    // Fourth controller 
     {
-        6,     // Kp: proportional gain
-        2,     // Ki: integral gain
-        0.035, // Kd: derivative gain
+        4,     // Kp: proportional gain
+        11,     // Ki: integral gain
+        0.028, // Kd: derivative gain
         Ts,    // Ts: sampling time
-        60, // fc: cutoff frequency of derivative filter (Hz), zero to disable
+        40, // fc: cutoff frequency of derivative filter (Hz), zero to disable
     },
 };
 
@@ -271,15 +273,24 @@ void sendMIDIMessages(bool touched) {
     // Touch
     static bool prevTouched = false; // Whether the knob is being touched
     if (touched != prevTouched) {
-        MIDIAddress addr(MCU::FADER_TOUCH_1, Channel(Idx)); // Send note on/off on correct channel
+        const MIDIAddress addr = MCU::FADER_TOUCH_1 + Idx;
         touched ? midi.sendNoteOn(addr, 127) : midi.sendNoteOff(addr, 127);
         prevTouched = touched;
     }
     // Position
     static Hysteresis<6 - Config::adc_ema_K, uint16_t, uint16_t> hyst;
-    if (hyst.update(adc.readFiltered(Idx))) {
+    if (prevTouched && hyst.update(adc.readFiltered(Idx))) {
         auto value = AH::increaseBitDepth<14, 10, uint16_t>(hyst.getValue());
         midi.sendPitchBend(MCU::VOLUME_1 + Idx, value);
+    }
+
+    // Feedback
+    if (Config::midi_feedback) {
+        static Hysteresis<6 - Config::adc_ema_K, uint16_t, uint16_t> hyst;
+        if (hyst.update(adc.readFiltered(Idx))) { // always echo changed valzes
+            auto value = AH::increaseBitDepth<14, 10, uint16_t>(hyst.getValue());
+            midi.sendPitchBend(MCU::VOLUME_1 + Idx, value);
+        }
     }
 }
 
