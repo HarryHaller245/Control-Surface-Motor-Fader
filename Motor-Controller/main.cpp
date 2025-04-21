@@ -90,7 +90,7 @@
 // ----------------------------- Configuration ------------------------------ //
 
 // Enable MIDI input/output.
-#define WITH_MIDI 0
+#define WITH_MIDI 1
 // Print to the Serial monitor instead of sending actual MIDI messages.
 #define MIDI_DEBUG 0
 
@@ -109,7 +109,7 @@ struct Config {
     // Increase this divisor to slow down the test reference:
     static constexpr uint8_t test_reference_speed_div = 4;
     // Allow control for tuning and starting experiments over Serial:
-    static constexpr bool serial_control = true;
+    static constexpr bool serial_control = false;
     // I²C slave address (zero to disable I²C):
     static constexpr uint8_t i2c_address = 8;
     // The baud rate to use for the Serial interface (e.g. for MIDI_DEBUG,
@@ -122,7 +122,7 @@ struct Config {
     static constexpr uint32_t midi_baud_rate = serial_baud_rate;
 
     // Number of faders, must be between 1 and 4:
-    static constexpr size_t num_faders = 1;
+    static constexpr size_t num_faders = 2;
     // Actually drive the motors. If set to false, runs all code as normal, but
     // doesn't turn on the motors.
     static constexpr bool enable_controller = true;
@@ -174,7 +174,7 @@ struct Config {
     // SMA filter length for setpoint filters, improves tracking of ramps if the
     // setpoint changes in steps (e.g. when the DAW only updates the reference
     // every 20 ms). Powers of two are significantly faster (e.g. 32 works well):
-    static constexpr uint8_t setpoint_sma_length = 0;
+    static constexpr uint8_t setpoint_sma_length = 32;
 
     // ------------------------ Computed Quantities ------------------------- //
 
@@ -221,11 +221,11 @@ Reference<Config> references[Config::num_faders];
 PID controllers[] {
     // This is an example of a controller with very little overshoot
     {
-        6,     // Kp: proportional gain
+        4,     // Kp: proportional gain
         2,     // Ki: integral gain
-        0.035, // Kd: derivative gain
+        0.03, // Kd: derivative gain
         Ts,    // Ts: sampling time
-        60, // fc: cutoff frequency of derivative filter (Hz), zero to disable
+        30, // fc: cutoff frequency of derivative filter (Hz), zero to disable
     },
     // This one has more overshoot, but less ramp tracking error
     {
@@ -277,7 +277,7 @@ void sendMIDIMessages(bool touched) {
     }
     // Position
     static Hysteresis<6 - Config::adc_ema_K, uint16_t, uint16_t> hyst;
-    if (prevTouched && hyst.update(adc.readFiltered(Idx))) {
+    if (hyst.update(adc.readFiltered(Idx))) {
         auto value = AH::increaseBitDepth<14, 10, uint16_t>(hyst.getValue());
         midi.sendPitchBend(MCU::VOLUME_1 + Idx, value);
     }
