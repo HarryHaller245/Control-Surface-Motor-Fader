@@ -279,10 +279,9 @@ HardwareSerialMIDI_Interface midi {Serial, Config::midi_baud_rate};
 #endif
 
 namespace MIDIFeedback {
-    // Ultra-compact 5-byte SysEx format:
-    // [F0 7D idx LSB MSB F7]
+    // Compact 5-byte SysEx format: [F0 7D idx LSB MSB F7]
     constexpr uint8_t MANUFACTURER_ID = 0x7D; // Educational/non-commercial ID
-    constexpr uint8_t SYSEX_SIZE = 5;         // Total bytes for our SysEx message
+    constexpr uint8_t SYSEX_SIZE = 6;         // Includes F0/F7
     
     void send(uint8_t faderIndex, uint16_t position) {
         uint8_t sysex[] = {
@@ -293,27 +292,24 @@ namespace MIDIFeedback {
             (position >> 7) & 0x7F,     // MSB (7 bits)
             0xF7                        // SysEx end
         };
-        // Only send if there's buffer space for the whole message
-        if (Serial.availableForWrite() >= SYSEX_SIZE) {
-            midi.sendSysEx(sysex);
-        }
+        midi.sendSysEx(sysex);
     }
 }
 
 template <uint8_t Idx>
 void sendMIDIMessages(bool touched) {
-    // Touch handling - requires 3 bytes (Note On/Off)
+    // Touch handling - 3 bytes (Note On/Off)
     static bool prevTouched = false;
     if (touched != prevTouched) {
-        if (Serial.availableForWrite() >= 3) {  // Check only for this message
+        if (Serial.availableForWrite() >= 3) {
             const MIDIAddress addr = MCU::FADER_TOUCH_1 + Idx;
             touched ? midi.sendNoteOn(addr, 127) : midi.sendNoteOff(addr, 127);
             prevTouched = touched;
         }
-        return;  // Skip other messages if touch state changed
+        return; // Skip other messages if touch state changed
     }
 
-    // Position handling (only when touched) - requires 3 bytes (Pitch Bend)
+    // Position handling - 3 bytes (Pitch Bend)
     static Hysteresis<6 - Config::adc_ema_K, uint16_t, uint16_t> posHyst;
     if (prevTouched && posHyst.update(adc.readFiltered(Idx))) {
         if (Serial.availableForWrite() >= 3) {
@@ -322,18 +318,13 @@ void sendMIDIMessages(bool touched) {
         }
     }
 
-    // Feedback handling (always when position changes) - requires 5 bytes (SysEx)
+    // Feedback handling - 6 bytes (SysEx)
     if (Config::midi_feedback) {
         static Hysteresis<6 - Config::adc_ema_K, uint16_t, uint16_t> fbHyst;
-        static elapsedMillis sinceLastFeedback;
-        constexpr uint16_t MIN_FEEDBACK_INTERVAL_MS = 10; // 100Hz max rate
-        
-        if (fbHyst.update(adc.readFiltered(Idx)) && 
-            sinceLastFeedback >= MIN_FEEDBACK_INTERVAL_MS) {
+        if (fbHyst.update(adc.readFiltered(Idx))) {
             if (Serial.availableForWrite() >= MIDIFeedback::SYSEX_SIZE) {
                 auto value = AH::increaseBitDepth<14, 10, uint16_t>(fbHyst.getValue());
                 MIDIFeedback::send(Idx, value);
-                sinceLastFeedback = 0;
             }
         }
     }
@@ -355,7 +346,6 @@ void updateMIDI() {
             break;
         else if (evt == MIDIReadEvent::CHANNEL_MESSAGE)
             updateMIDISetpoint(midi.getChannelMessage());
-        // Note: SysEx messages are ignored in this implementation
     }
 }
 #endif
