@@ -122,7 +122,7 @@ struct Config {
     static constexpr uint32_t midi_baud_rate = serial_baud_rate;
     // Send back MIDI positions over Serial on Change.
     // Usefull for testing faders with MIDI feedback.
-    static constexpr bool midi_feedback = false;
+    static constexpr bool midi_feedback = true;
 
     // Number of faders, must be between 1 and 4:
     static constexpr size_t num_faders = 2;
