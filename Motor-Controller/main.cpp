@@ -1,3 +1,15 @@
+#include <MIDIUSB.h>
+#include <MIDIUSB_Defs.h>
+#include <frequencyToNote.h>
+#include <pitchToFrequency.h>
+#include <pitchToNote.h>
+
+#include <MIDIUSB.h>
+#include <MIDIUSB_Defs.h>
+#include <frequencyToNote.h>
+#include <pitchToFrequency.h>
+#include <pitchToNote.h>
+
 // Configuration and initialization of the analog-to-digital converter:
 #include "ADC.hpp"
 // Capacitive touch sensing:
@@ -316,18 +328,23 @@ void updateMIDI() {
 
 // ---------------- MIDI Feedback SysEx ----------------- //
 
-template <uint8_t Idx>
-void sendMIDIFeedback(uint16_t value) {
-    // SysEx message format: F0 <manufacturer ID> <fader index> <LSB> <MSB> F7
-    uint8_t sysExMessage[] = {
-        0xF0,               // SysEx start
-        0x7D,               // Non-commercial/educational manufacturer ID
-        Idx,                // Fader index (0-3)
-        value & 0x7F,       // LSB
-        (value >> 7) & 0x7F,// MSB
-        0xF7                // SysEx end
+namespace FeedbackConfig {
+    constexpr uint8_t MANUFACTURER_ID = 0x7D; // Educational/non-commercial ID
+    constexpr uint8_t DEVICE_ID = 0x01;       // Your device identifier
+}
+
+// Send compact 6-byte SysEx feedback message
+void sendFaderFeedback(uint8_t faderIndex, uint16_t position) {
+    uint8_t sysex[] = {
+        0xF0,                       // SysEx start
+        FeedbackConfig::MANUFACTURER_ID,
+        FeedbackConfig::DEVICE_ID,
+        faderIndex & 0x03,          // Fader index (0-3)
+        position & 0x7F,            // LSB (7 bits)
+        (position >> 7) & 0x7F,     // MSB (7 bits)
+        0xF7                        // SysEx end
     };
-    midi.send(sysExMessage, sizeof(sysExMessage));
+    midi.sendSysEx(sysex);
 }
 
 // ---------------- Printing all signals for serial plotter ----------------- //
