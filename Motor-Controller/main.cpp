@@ -1,15 +1,3 @@
-#include <MIDIUSB.h>
-#include <MIDIUSB_Defs.h>
-#include <frequencyToNote.h>
-#include <pitchToFrequency.h>
-#include <pitchToNote.h>
-
-#include <MIDIUSB.h>
-#include <MIDIUSB_Defs.h>
-#include <frequencyToNote.h>
-#include <pitchToFrequency.h>
-#include <pitchToNote.h>
-
 // Configuration and initialization of the analog-to-digital converter:
 #include "ADC.hpp"
 // Capacitive touch sensing:
@@ -292,7 +280,9 @@ namespace MIDIFeedback {
             (position >> 7) & 0x7F,     // MSB (7 bits)
             0xF7                        // SysEx end
         };
-        midi.sendSysEx(sysex);
+        if (Serial.availableForWrite() >= SYSEX_SIZE) {
+            midi.sendSysEx(sysex);
+        }
     }
 }
 
