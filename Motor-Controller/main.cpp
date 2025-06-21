@@ -284,12 +284,11 @@ void sendMIDIMessages(bool touched) {
         midi.sendPitchBend(MCU::VOLUME_1 + Idx, value);
     }
 
-    // Feedback
     if (Config::midi_feedback) {
         static Hysteresis<6 - Config::adc_ema_K, uint16_t, uint16_t> hyst;
-        if (hyst.update(adc.readFiltered(Idx))) { // always echo changed valzes
+        if (hyst.update(adc.readFiltered(Idx))) {
             auto value = AH::increaseBitDepth<14, 10, uint16_t>(hyst.getValue());
-            midi.sendPitchBend(MCU::VOLUME_1 + Idx, value);
+            sendMIDIFeedback(Idx, value); // Use new feedback function
         }
     }
 }
@@ -314,6 +313,22 @@ void updateMIDI() {
 }
 
 #endif
+
+// ---------------- MIDI Feedback SysEx ----------------- //
+
+template <uint8_t Idx>
+void sendMIDIFeedback(uint16_t value) {
+    // SysEx message format: F0 <manufacturer ID> <fader index> <LSB> <MSB> F7
+    uint8_t sysExMessage[] = {
+        0xF0,               // SysEx start
+        0x7D,               // Non-commercial/educational manufacturer ID
+        Idx,                // Fader index (0-3)
+        value & 0x7F,       // LSB
+        (value >> 7) & 0x7F,// MSB
+        0xF7                // SysEx end
+    };
+    midi.send(sysExMessage, sizeof(sysExMessage));
+}
 
 // ---------------- Printing all signals for serial plotter ----------------- //
 
