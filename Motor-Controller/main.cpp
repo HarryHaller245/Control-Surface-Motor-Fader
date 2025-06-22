@@ -313,7 +313,7 @@ void sendMIDIMessages(bool touched) {
     }
 
     // Feedback handling - 6 bytes (SysEx)
-    if (!sendingOtherMessages && Config::midi_feedback) { // Only send feedback if no other messages
+    if (!sendingOtherMessages && !touched && Config::midi_feedback) { // Only send feedback if no other messages
         static Hysteresis<6 - Config::adc_ema_K, uint16_t, uint16_t> fbHyst;
         if (fbHyst.update(adc.readFiltered(Idx))) {
             if (Serial.availableForWrite() >= MIDIFeedback::SYSEX_SIZE) {
