@@ -271,13 +271,13 @@ namespace MIDIFeedback {
     constexpr uint8_t MANUFACTURER_ID = 0x7D; // Educational/non-commercial ID
     constexpr uint8_t SYSEX_SIZE = 6;         // Includes F0/F7
     
-    void send(uint8_t faderIndex, uint16_t position) {
+    void send(uint8_t channel, uint16_t value) {
         uint8_t sysex[] = {
             0xF0,                       // SysEx start
             MANUFACTURER_ID,
-            faderIndex & 0x03,          // Fader index (0-3)
-            position & 0x7F,            // LSB (7 bits)
-            (position >> 7) & 0x7F,     // MSB (7 bits)
+            channel,                  // addr
+            value & 0x7F,            // LSB (7 bits)
+            (value >> 7) & 0x7F,     // MSB (7 bits)
             0xF7                        // SysEx end
         };
         if (Serial.availableForWrite() >= SYSEX_SIZE) {
@@ -288,13 +288,16 @@ namespace MIDIFeedback {
 
 template <uint8_t Idx>
 void sendMIDIMessages(bool touched) {
-    // Touch handling - 3 bytes (Note On/Off)
     static bool prevTouched = false;
+    static bool sendingOtherMessages = false; // Flag to track other messages
+
+    // Touch handling - 3 bytes (Note On/Off)
     if (touched != prevTouched) {
         if (Serial.availableForWrite() >= 3) {
             const MIDIAddress addr = MCU::FADER_TOUCH_1 + Idx;
             touched ? midi.sendNoteOn(addr, 127) : midi.sendNoteOff(addr, 127);
             prevTouched = touched;
+            sendingOtherMessages = true; // Mark as sending other messages
         }
         return; // Skip other messages if touch state changed
     }
@@ -305,19 +308,25 @@ void sendMIDIMessages(bool touched) {
         if (Serial.availableForWrite() >= 3) {
             auto value = AH::increaseBitDepth<14, 10, uint16_t>(posHyst.getValue());
             midi.sendPitchBend(MCU::VOLUME_1 + Idx, value);
+            sendingOtherMessages = true; // Mark as sending other messages
         }
     }
 
     // Feedback handling - 6 bytes (SysEx)
-    if (Config::midi_feedback) {
+    if (!sendingOtherMessages && Config::midi_feedback) { // Only send feedback if no other messages
         static Hysteresis<6 - Config::adc_ema_K, uint16_t, uint16_t> fbHyst;
         if (fbHyst.update(adc.readFiltered(Idx))) {
             if (Serial.availableForWrite() >= MIDIFeedback::SYSEX_SIZE) {
                 auto value = AH::increaseBitDepth<14, 10, uint16_t>(fbHyst.getValue());
-                MIDIFeedback::send(Idx, value);
+                const MIDIAddress addr = MCU::FADER_TOUCH_1 + Idx;
+                uint8_t channel = addr.getChannel().getRaw();
+                MIDIFeedback::send(channel, value);
             }
         }
     }
+
+    // Reset the flag after processing
+    sendingOtherMessages = false;
 }
 
 void updateMIDISetpoint(ChannelMessage msg) {
